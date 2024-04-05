@@ -61,10 +61,12 @@ class Meter(object):
 
         await settings.add_settings(
             Setting(settingprefix + "/ClassAndVrmInstance", "grid:40", 0, 0, alias="instance"),
-            Setting(settingprefix + '/Position', 0, 0, 2, alias="position")
+            Setting(settingprefix + '/Position', 0, 0, 2, alias="position"),
+            Setting(settingprefix + '/DeviceType', "em", alias="deviceType")
         )
 
         role, instance = self.role_instance(settings.get_value(settings.alias("instance")))
+        DeviceType = settings.get_value(settings.alias("deviceType"))
 
         self.service = await Service.create(bus, "com.victronenergy.{}.shelly_{}".format(role, mac) + '1')
 
@@ -81,7 +83,7 @@ class Meter(object):
         self.service.add_item(TextArrayItem('/AllowedRoles', ['grid', 'pvinverter', 'genset', 'acload']))
         self.service.add_item(TextItem('/Role', role, writeable=True, onchange=self.role_changed))
         self.service.add_item(TextArrayItem('/AllowedDevices', ['em', 'pm']))
-        self.service.add_item(TextItem('/DeviceType', role, writeable=True, onchange=self.device_changed))
+        self.service.add_item(TextItem('/DeviceType', DeviceType, writeable=True, onchange=self.device_changed)) 
 
         if role == 'pvinverter':
             self.service.add_item(IntegerItem('/Position',
@@ -122,14 +124,16 @@ class Meter(object):
         if self.PMSettingsSetup:
             bus = await MessageBus(bus_type=self.bus_type).connect()
 
-            for instance_number in range(2, 5):
+            for instance_number in range(2, 4):
                 settingprefix = f'/Settings/Devices/shelly_{mac}{instance_number}'
                 await settings.add_settings(
                     Setting(settingprefix + "/ClassAndVrmInstance", "grid:40", 0, 0, alias="instance"),
-                    Setting(settingprefix + '/Position', 0, 0, 2, alias="position")
+                    Setting(settingprefix + '/Position', 0, 0, 2, alias="position"),
+                    Setting(settingprefix + '/DeviceType', "pm", alias="deviceType") #defaults to PM given this device wouldnt exist on EM.
                 )
 
                 role, instance = self.role_instance(settings.get_value(settings.alias("instance")))
+                DeviceType = settings.get_value(settings.alias("deviceType"))
 
                 self.servicePM[instance_number - 2] = await Service.create(
                     bus, f"com.victronenergy.{role}.shelly_{mac}{instance_number}")
@@ -146,8 +150,8 @@ class Meter(object):
 
                 self.servicePM[instance_number - 2].add_item(TextArrayItem('/AllowedRoles', ['grid', 'pvinverter', 'genset', 'acload']))
                 self.servicePM[instance_number - 2].add_item(TextItem('/Role', role, writeable=True, onchange=self.role_changed))
-                self.servicePM[instance_number - 2].add_item(TextArrayItem('/AllowedDevices', ['em', 'pm']))
-                self.servicePM[instance_number - 2].add_item(TextItem('/DeviceType', role, writeable=True, onchange=self.device_changed))
+                self.servicePM[instance_number - 2].add_item(TextArrayItem('/AllowedDevices', ['pm'])) #not both here as ones switch 1 is set the rest must follow
+                self.servicePM[instance_number - 2].add_item(TextItem('/DeviceType', DeviceType, writeable=True, onchange=self.device_changed))
 
                 if role == 'pvinverter':
                     self.servicePM[instance_number - 2].add_item(IntegerItem('/Position',
@@ -168,7 +172,7 @@ class Meter(object):
 
     async def update(self, data):
         if self.service and data.get('method') == 'NotifyStatus':
-            if self.settings.get_value(settings.alias("DeviceType")) == 'em':
+            if self.settings.get_value(settings.alias("DeviceType")) == 'em': #stock shelly_debus code
                 try:
                     d = data['params']['em:0']
                 except KeyError:
@@ -201,7 +205,7 @@ class Meter(object):
                         s["/Ac/L3/Energy/Forward"] = round(d["c_total_act_energy"]/1000, 1)
                         s["/Ac/L3/Energy/Reverse"] = round(d["c_total_act_ret_energy"]/1000, 1)
 
-            elif self.settings.get_value(settings.alias("DeviceType")) == 'pm':
+            elif self.settings.get_value(settings.alias("DeviceType")) == 'pm': #editted dbus_shelly code to work with PM1
                 if self.PMSettingsSetup:
                     for i, service in enumerate(self.servicePM):
                         try:
@@ -210,23 +214,23 @@ class Meter(object):
                             pass
                         else:
                             with service as s:
-                                s['/Ac/L1/Voltage'] = d["avoltage"]
-                                s['/Ac/L1/Current'] = d["acurrent"]
-                                s['/Ac/L1/Power'] = d["apower"]
-                                s['/Ac/Power'] = d["apower"]
-                                avoltage = d.get("avoltage")
+                                avoltage = d.get("voltage")
                                 if avoltage is not None:
-                                   s['/Ac/L1/Voltage'] = avoltage
-                                acurrent = d.get("acurrent")
+                                   s['/Ac/L1/Voltage'] = avoltage #could add option to getPhase from settings. 
+                                acurrent = d.get("current")
                                 if acurrent is not None:
-                                    s['/Ac/L1/Current'] = acurrent
+                                    s['/Ac/L1/Current'] = acurrent #could add option to getPhase from settings. 
                                 apower = d.get("apower")
                                 if apower is not None:
-                                    s['/Ac/L1/Power'] = apower
+                                    s['/Ac/L1/Power'] = apower #could add option to getPhase from settings. 
                                     s['/Ac/Power'] = apower
+                                    #to add the total energy lookups not sure if can do reverse
+                                    #aenergy = d.get("aenergy")
+                                    #s["/Ac/Energy/Forward"] = round(aenergy.get("total")/1000,1)
+                                    #s["/Ac/L1/Energy/Forward"] = round(aenergy.get("total")/1000,1)
                                 
                 else:
-                    await self.pmSetup()
+                    await self.pmSetup() #setups up an extra 3 devices in dbus service for the remaining three switches if not already setup ()
                     await self.update(data)
 
     def role_instance(self, value):
