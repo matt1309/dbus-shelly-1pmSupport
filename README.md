@@ -1,3 +1,11 @@
+#This is a forked version of dbus-shelly.
+Edits have been make to integrate shelly 1PM. 
+If DeviceType set to PM then 3 additional devices will be created and the data from each switch will be recorded under
+each device. 
+With number added to end of instance and product name to differentiate them. 
+
+
+
 # Venus driver for Shelly energy meters
 
 This is a VenusOS driver for Gen2 Shelly energy meters.
