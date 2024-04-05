@@ -214,6 +214,17 @@ class Meter(object):
                                 s['/Ac/L1/Current'] = d["acurrent"]
                                 s['/Ac/L1/Power'] = d["apower"]
                                 s['/Ac/Power'] = d["apower"]
+                                avoltage = d.get("avoltage")
+                                if avoltage is not None:
+                                   s['/Ac/L1/Voltage'] = avoltage
+                                acurrent = d.get("acurrent")
+                                if acurrent is not None:
+                                    s['/Ac/L1/Current'] = acurrent
+                                apower = d.get("apower")
+                                if apower is not None:
+                                    s['/Ac/L1/Power'] = apower
+                                    s['/Ac/Power'] = apower
+                                
                 else:
                     await self.pmSetup()
                     await self.update(data)
